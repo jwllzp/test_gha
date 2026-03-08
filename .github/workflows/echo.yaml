@@ -4,19 +4,71 @@ on:
   workflow_dispatch:
     inputs:
       docker_dir:
-        description: "Directory containing the Dockerfile"
+        description: "Directory containing Dockerfile"
         required: true
         default: "."
+      image_name:
+        description: "Logical image name"
+        required: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+      image_full: ${{ steps.meta.outputs.repo }}:${{ steps.meta.outputs.tag }}
     steps:
+      - name: Fail if branch is main
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "Refusing to run on branch 'main'."
+            exit 1
+          fi
+
       - name: Checkout selected branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 1
 
-      - name: Pretend build
-        run: echo "Building docker image from ${{ inputs.docker_dir }} on branch ${{ github.ref_name }}"
+      - name: Ensure Dockerfile exists
+        run: |
+          if [ ! -f "${{ inputs.docker_dir }}/Dockerfile" ]; then
+            echo "No Dockerfile found in '${{ inputs.docker_dir }}'"
+            exit 1
+          fi
+
+      - name: Prepare image metadata
+        id: meta
+        run: |
+          TS=$(date +%Y%m%d%H%M%S)
+          IMAGE_NAME="${{ inputs.image_name }}"
+          TAG="${IMAGE_NAME}-${TS}"
+
+          if ! [[ "$TS" =~ ^[0-9]+$ ]]; then
+            echo "Timestamp is not numeric. Something is wrong."
+            exit 1
+          fi
+
+          LEN=${#TAG}
+
+          if [ "$LEN" -gt 128 ]; then
+            echo "Tag '${TAG}' is too long (${LEN} chars). Max allowed is 128."
+            exit 1
+          fi
+
+          REPO=$(basename "${{ github.repository }}")
+
+          echo "timestamp=$TS" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "repo=$REPO" >> $GITHUB_OUTPUT
+
+      - name: Build docker image
+        run: |
+          docker build \
+            -t ${{ steps.meta.outputs.repo }}:${{ steps.meta.outputs.tag }} \
+            ${{ inputs.docker_dir }}
+
+      - name: Emit image name
+        run: |
+          echo "IMAGE_NAME=${{ steps.meta.outputs.repo }}:${{ steps.meta.outputs.tag }}"
