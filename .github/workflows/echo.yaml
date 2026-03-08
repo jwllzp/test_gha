@@ -3,10 +3,6 @@ name: Build Docker
 on:
   workflow_dispatch:
     inputs:
-      branch:
-        description: "Branch to build from"
-        required: true
-        default: "main"
       docker_dir:
         description: "Directory containing the Dockerfile"
         required: true
@@ -16,12 +12,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout minimal
+      - name: Checkout selected branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ github.ref_name }}
           fetch-depth: 1
-          sparse-checkout: ${{ github.event.inputs.docker_dir }}
 
-      - name: Pretend to build image
-        run: echo "Building docker image from ${{ github.event.inputs.docker_dir }} on branch ${{ github.event.inputs.branch }}"
+      - name: Pretend build
+        run: echo "Building docker image from ${{ inputs.docker_dir }} on branch ${{ github.ref_name }}"
